@@ -132,6 +132,7 @@ class HTTPDigestAuth(AuthBase):
     chal: dict[str, str]
     pos: int | None
     num_401_calls: int | None
+    host: str | None
 
     @overload
     def __init__(self, username: str, password: str) -> None: ...
@@ -153,6 +154,7 @@ class HTTPDigestAuth(AuthBase):
             self._thread_local.chal = {}
             self._thread_local.pos = None
             self._thread_local.num_401_calls = None
+            self._thread_local.host = None
 
     def build_digest_header(self, method: str, url: str) -> str | None:
         """
@@ -283,6 +285,11 @@ class HTTPDigestAuth(AuthBase):
             self._thread_local.num_401_calls = 1
             return r
 
+        # Only answer challenges from the host the credentials were given
+        # for, not from a host we were redirected to.
+        if urlparse(r.url).hostname != self._thread_local.host:
+            return r
+
         if self._thread_local.pos is not None:
             # Rewind the file position indicator of the body to where
             # it was to resend the request.
@@ -339,6 +346,7 @@ class HTTPDigestAuth(AuthBase):
         r.register_hook("response", self.handle_401)
         r.register_hook("response", self.handle_redirect)
         self._thread_local.num_401_calls = 1
+        self._thread_local.host = urlparse(cast(str, r.url)).hostname
 
         return r
 

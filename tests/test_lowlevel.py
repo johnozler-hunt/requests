@@ -189,6 +189,48 @@ def test_digestauth_401_count_reset_on_redirect():
         close_server.set()
 
 
+def test_digestauth_not_sent_to_redirected_host():
+    """Ensure we don't answer a digest challenge from a different host
+    we were redirected to.
+    """
+    text_401 = (b'HTTP/1.1 401 UNAUTHORIZED\r\n'
+                b'Content-Length: 0\r\n'
+                b'WWW-Authenticate: Digest nonce="6bf5d6e4da1ce66918800195d6b9130d"'
+                b', realm="me@kennethreitz.com"\r\n\r\n')
+
+    auth = requests.auth.HTTPDigestAuth('user', 'pass')
+
+    def challenge_handler(sock):
+        # Challenge the redirected request.
+        request_content = consume_socket_content(sock, timeout=0.5)
+        assert b'Authorization:' not in request_content
+        sock.send(text_401)
+
+        # Verify the client didn't respond to the challenge.
+        request_content = consume_socket_content(sock, timeout=0.5)
+        assert request_content == b''
+
+        return request_content
+
+    close_server = threading.Event()
+    other = Server(challenge_handler, host='127.0.0.1', wait_to_close_event=close_server)
+
+    with other as (other_host, other_port):
+        text_302 = (b'HTTP/1.1 302 FOUND\r\n'
+                    b'Content-Length: 0\r\n'
+                    b'Location: http://%s:%d/\r\n\r\n') % (
+                        other_host.encode(), other_port)
+        server = Server.text_response_server(
+            text_302.decode(), wait_to_close_event=close_server)
+
+        with server as (host, port):
+            r = requests.get(f'http://{host}:{port}/', auth=auth, timeout=2)
+            assert r.status_code == 401
+            assert r.history[0].status_code == 302
+            assert 'Authorization' not in r.request.headers
+            close_server.set()
+
+
 def test_digestauth_401_only_sent_once():
     """Ensure we correctly respond to a 401 challenge once, and then
     stop responding if challenged again.
