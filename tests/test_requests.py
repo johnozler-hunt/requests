@@ -680,6 +680,21 @@ class TestRequests:
 
         assert ("Proxy-Authorization" in prep.headers) is has_proxy_auth
 
+    @pytest.mark.parametrize(
+        "proxy",
+        (
+            "socks5://test:pass@localhost:1080",
+            "socks5h://test:pass@localhost:1080",
+            "SOCKS4://test:pass@localhost:1080",
+        ),
+    )
+    def test_proxy_authorization_not_appended_to_socks_proxied_request(self, proxy):
+        session = requests.Session()
+        prep = requests.Request("GET", "http://example.com").prepare()
+        session.rebuild_proxies(prep, {"http": proxy})
+
+        assert "Proxy-Authorization" not in prep.headers
+
     def test_basicauth_with_netrc(self, httpbin):
         auth = ("user", "pass")
         wrong_auth = ("wronguser", "wrongpass")
