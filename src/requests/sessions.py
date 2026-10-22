@@ -356,13 +356,16 @@ class SessionRedirectMixin:
             del headers["Proxy-Authorization"]
 
         try:
-            username, password = get_auth_from_url(new_proxies[scheme])
+            proxy = new_proxies[scheme]
+            username, password = get_auth_from_url(proxy)
         except KeyError:
-            username, password = None, None
+            proxy, username, password = "", None, None
 
         # urllib3 handles proxy authorization for us in the standard adapter.
-        # Avoid appending this to TLS tunneled requests where it may be leaked.
-        if not scheme.startswith("https") and username and password:
+        # Avoid appending this to TLS tunneled requests or requests sent
+        # through a SOCKS proxy, where it would reach the origin server.
+        is_socks = proxy.lower().startswith("socks")
+        if not scheme.startswith("https") and not is_socks and username and password:
             headers["Proxy-Authorization"] = _basic_auth_str(username, password)
 
         return new_proxies
