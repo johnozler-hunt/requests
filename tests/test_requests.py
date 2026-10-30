@@ -3060,6 +3060,33 @@ class TestPreparingURLs:
 
         assert client_cert is not None
 
+    def test_https_proxy_certificate_verified_for_http_url(self):
+        def response_handler(sock):
+            consume_socket_content(sock, timeout=0.5)
+            sock.send(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+
+        s = requests.Session()
+        close_server = threading.Event()
+        server = TLSServer(
+            handler=response_handler,
+            wait_to_close_event=close_server,
+            requests_to_handle=2,
+            cert_chain="tests/certs/valid/server/server.pem",
+            keyfile="tests/certs/valid/server/server.key",
+        )
+
+        with server as (host, port):
+            url = "http://example.com/"
+            proxies = {"http": f"https://{host}:{port}"}
+            r1 = s.get(url, proxies=proxies, verify="tests/certs/valid/ca/ca.crt")
+            assert r1.status_code == 200
+
+            # The proxy's certificate isn't signed by a CA in the default bundle
+            with pytest.raises(requests.exceptions.ConnectionError) as excinfo:
+                s.get(url, proxies=proxies)
+            assert "CERTIFICATE_VERIFY_FAILED" in str(excinfo.value)
+            close_server.set()
+
 
 def test_content_length_for_bytes_data(httpbin):
     data = "This is a string containing multi-byte UTF-8 ☃️"

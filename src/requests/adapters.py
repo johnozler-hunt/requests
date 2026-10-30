@@ -318,7 +318,9 @@ class HTTPAdapter(BaseAdapter):
             to a CA bundle to use
         :param cert: The SSL certificate to verify.
         """
-        if url.lower().startswith("https") and verify:
+        # An http:// URL sent through an https:// proxy still connects over TLS:
+        # conn is then the proxy's pool, so the URL's scheme alone isn't enough.
+        if (url.lower().startswith("https") or conn.scheme == "https") and verify:
             cert_loc = None
 
             # Allow self-specified cert location.
