@@ -680,6 +680,17 @@ class TestRequests:
 
         assert ("Proxy-Authorization" in prep.headers) is has_proxy_auth
 
+    def test_proxy_authorization_uses_host_specific_proxy(self):
+        session = requests.Session()
+        proxies = {
+            "http": "http://test:pass@localhost:8080",
+            "http://internal.example": "http://localhost:8090",
+        }
+        prep = requests.Request("GET", "http://internal.example/").prepare()
+        session.rebuild_proxies(prep, proxies)
+
+        assert "Proxy-Authorization" not in prep.headers
+
     def test_basicauth_with_netrc(self, httpbin):
         auth = ("user", "pass")
         wrong_auth = ("wronguser", "wrongpass")

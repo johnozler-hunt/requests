@@ -54,6 +54,7 @@ from .utils import (  # noqa: F401
     requote_uri,
     resolve_proxies,
     rewind_body,
+    select_proxy,
     should_bypass_proxies,  # re-export for external consumers
     to_key_val_list,
 )
@@ -355,9 +356,12 @@ class SessionRedirectMixin:
         if "Proxy-Authorization" in headers:
             del headers["Proxy-Authorization"]
 
-        try:
-            username, password = get_auth_from_url(new_proxies[scheme])
-        except KeyError:
+        # Use the same proxy the adapter will pick, so a host-specific
+        # proxy never receives credentials meant for the scheme's proxy.
+        proxy = select_proxy(prepared_request.url, new_proxies)
+        if proxy:
+            username, password = get_auth_from_url(proxy)
+        else:
             username, password = None, None
 
         # urllib3 handles proxy authorization for us in the standard adapter.
